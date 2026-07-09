@@ -14,10 +14,19 @@ export type AiProvider = 'openai' | 'anthropic'
  * (stored AES-256-GCM-encrypted at rest).
  */
 export interface AiConfig {
+  name: string
+  description: string | null
   provider: AiProvider
   model: string
   apiKey: string
+  baseUrl: string | null
   systemPrompt: string | null
+  tone: string
+  primaryLanguage: string
+  businessInstructions: string | null
+  safetyRules: string | null
+  temperature: number
+  managedByEnv: boolean
   isActive: boolean
   autoReplyEnabled: boolean
   autoReplyMaxPerConversation: number

@@ -110,6 +110,12 @@ export async function dispatchInboundToAiReply(
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      agentName: config.name,
+      agentDescription: config.description,
+      tone: config.tone,
+      primaryLanguage: config.primaryLanguage,
+      businessInstructions: config.businessInstructions,
+      safetyRules: config.safetyRules,
     })
 
     const { text, handoff, usage } = await generateReply({

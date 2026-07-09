@@ -28,9 +28,11 @@ export async function generateReply(args: GenerateArgs): Promise<GenerateResult>
   const providerArgs = {
     apiKey: config.apiKey,
     model: config.model,
+    baseUrl: config.baseUrl,
     systemPrompt,
     messages,
     timeoutMs,
+    temperature: config.temperature,
   }
 
   let result: { text: string; usage: AiUsage | null }

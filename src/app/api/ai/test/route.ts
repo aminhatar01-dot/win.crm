@@ -64,10 +64,20 @@ export async function POST(request: Request) {
 
     try {
       await validateAiCredentials({
+        name: 'WIN.AI Assistant',
+        description: null,
         provider,
         model,
         apiKey: apiKeyPlain,
+        baseUrl:
+          provider === 'openai' ? process.env.OPENAI_BASE_URL?.trim() || null : null,
         systemPrompt: null,
+        tone: 'profesional y claro',
+        primaryLanguage: 'es',
+        businessInstructions: null,
+        safetyRules: null,
+        temperature: 0.3,
+        managedByEnv: !rawKey,
         isActive: true,
         autoReplyEnabled: false,
         autoReplyMaxPerConversation: 3,

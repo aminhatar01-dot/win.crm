@@ -30,7 +30,7 @@ export async function GET() {
       // `api_key` is selected only to derive `has_key` — it is stripped
       // out below and never returned to the client.
       .select(
-        'provider, model, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key',
+        'name, description, provider, model, system_prompt, tone, primary_language, business_instructions, safety_rules, temperature, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key',
       )
       .eq('account_id', accountId)
       .maybeSingle()
@@ -43,7 +43,29 @@ export async function GET() {
       )
     }
 
-    if (!data) return NextResponse.json({ configured: false })
+    if (!data) {
+      const hasEnvKey = Boolean(process.env.OPENAI_API_KEY?.trim())
+      return NextResponse.json({
+        configured: hasEnvKey,
+        has_key: hasEnvKey,
+        has_embeddings_key: false,
+        managed_by_env: hasEnvKey,
+        name: 'WIN.AI Assistant',
+        description: 'Agente gestionado con OPENAI_API_KEY del servidor.',
+        provider: 'openai',
+        model: process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini',
+        system_prompt: null,
+        tone: 'profesional y claro',
+        primary_language: 'es',
+        business_instructions: null,
+        safety_rules: null,
+        temperature: 0.3,
+        is_active: hasEnvKey,
+        auto_reply_enabled: false,
+        auto_reply_max_per_conversation: 3,
+        handoff_agent_id: null,
+      })
+    }
     // The keys are selected only to derive the has_* flags; neither is
     // returned to the client.
     const { api_key, embeddings_api_key, ...safe } = data
@@ -51,6 +73,7 @@ export async function GET() {
       configured: true,
       has_key: !!api_key,
       has_embeddings_key: !!embeddings_api_key,
+      managed_by_env: !api_key && Boolean(process.env.OPENAI_API_KEY?.trim()),
       ...safe,
     })
   } catch (err) {
@@ -83,6 +106,34 @@ export async function POST(request: Request) {
     }
     const model = typeof body.model === 'string' ? body.model.trim() : ''
     if (!model) return bad('model is required')
+    const name =
+      typeof body.name === 'string' && body.name.trim()
+        ? body.name.trim()
+        : 'WIN.AI Assistant'
+    const description =
+      typeof body.description === 'string' && body.description.trim()
+        ? body.description.trim()
+        : null
+    const tone =
+      typeof body.tone === 'string' && body.tone.trim()
+        ? body.tone.trim()
+        : 'profesional y claro'
+    const primaryLanguage =
+      typeof body.primary_language === 'string' && body.primary_language.trim()
+        ? body.primary_language.trim()
+        : 'es'
+    const businessInstructions =
+      typeof body.business_instructions === 'string' &&
+      body.business_instructions.trim()
+        ? body.business_instructions.trim()
+        : null
+    const safetyRules =
+      typeof body.safety_rules === 'string' && body.safety_rules.trim()
+        ? body.safety_rules.trim()
+        : null
+    let temperature = Number(body.temperature)
+    if (!Number.isFinite(temperature)) temperature = 0.3
+    temperature = Math.min(1, Math.max(0, temperature))
 
     const systemPrompt =
       typeof body.system_prompt === 'string' && body.system_prompt.trim()
@@ -141,6 +192,8 @@ export async function POST(request: Request) {
       } catch {
         return bad('Stored API key could not be decrypted — re-enter your key.')
       }
+    } else if (provider === 'openai' && process.env.OPENAI_API_KEY?.trim()) {
+      apiKeyPlain = process.env.OPENAI_API_KEY.trim()
     } else {
       return bad('api_key is required')
     }
@@ -161,7 +214,17 @@ export async function POST(request: Request) {
           provider,
           model,
           apiKey: apiKeyPlain,
+          baseUrl:
+            provider === 'openai' ? process.env.OPENAI_BASE_URL?.trim() || null : null,
           systemPrompt,
+          name,
+          description,
+          tone,
+          primaryLanguage,
+          businessInstructions,
+          safetyRules,
+          temperature,
+          managedByEnv: !rawKey && !existing?.api_key,
           isActive,
           autoReplyEnabled,
           autoReplyMaxPerConversation: maxPer,
@@ -202,6 +265,13 @@ export async function POST(request: Request) {
       provider,
       model,
       system_prompt: systemPrompt,
+      name,
+      description,
+      tone,
+      primary_language: primaryLanguage,
+      business_instructions: businessInstructions,
+      safety_rules: safetyRules,
+      temperature,
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
       auto_reply_max_per_conversation: maxPer,

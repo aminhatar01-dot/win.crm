@@ -15,7 +15,7 @@
     "createAccount": "Crear cuenta"
   },
   "Sidebar": {
-    "title": "Plantilla CRM para WhatsApp",
+    "title": "WIN.AI",
     "dashboard": "Tablero",
     "inbox": "Bandeja de entrada",
     "notifications": "Notificaciones",
@@ -1275,7 +1275,7 @@
       "labelTooLong": "La etiqueta debe tener {max} caracteres o menos",
       "copied": "Enlace de invitación copiado",
       "clipboardBlocked": "Portapapeles bloqueado — copia el enlace manualmente",
-      "whatsappMessage": "Únete a {accountName} en wacrm usando este enlace (válido por {expiresInDays} días): {url}"
+      "whatsappMessage": "Únete a {accountName} en WIN.AI usando este enlace (válido por {expiresInDays} días): {url}"
     },
     "tagsAndFields": {
       "title": "Campos y etiquetas",
@@ -1386,8 +1386,8 @@
       "saveResubmit": "Guardar y reenviar",
       "submitApproval": "Enviar para aprobación",
       "deleteDialogTitle": "¿Eliminar plantilla?",
-      "deleteMetaDesc": "\"{name}\" se eliminará de Meta y de wacrm. Las difusiones activas que usen esta plantilla empezarán a fallar. Esta acción no se puede deshacer.",
-      "deleteLocalDesc": "\"{name}\" se eliminará de wacrm. Dado que nunca se envió a Meta, no se requiere limpieza remota.",
+      "deleteMetaDesc": "\"{name}\" se eliminará de Meta y de WIN.AI. Las difusiones activas que usen esta plantilla empezarán a fallar. Esta acción no se puede deshacer.",
+      "deleteLocalDesc": "\"{name}\" se eliminará de WIN.AI. Dado que nunca se envió a Meta, no se requiere limpieza remota.",
       "deleting": "Eliminando…",
       "delete": "Eliminar",
       "toastLoadFailed": "Error al cargar plantillas",
@@ -1428,7 +1428,7 @@
       "notConnected": "No conectado",
       "connectedDesc": "Tu token de acceso autentica con Meta. Revisa el estado de registro abajo para ver si los webhooks están operativos.",
       "notConnectedDesc": "Configura tus credenciales de la API de Meta a continuación para conectar tu cuenta de WhatsApp Business.",
-      "registered": "Registrado — Meta enviará eventos a wacrm",
+      "registered": "Registrado — Meta enviará eventos a WIN.AI",
       "notRegistered": "No registrado — Meta no enviará eventos",
       "verifyWithMeta": "Verificar con Meta",
       "subscribedSince": "Suscrito desde {date}. Haz clic en Verificar con Meta si los eventos dejan de llegar.",
@@ -1452,7 +1452,7 @@
       "twoStepPin": "PIN de verificación en dos pasos",
       "optional": "(opcional)",
       "pinPlaceholder": "PIN de 6 dígitos del Administrador de WhatsApp de Meta",
-      "pinHint": "Necesario únicamente para conectar mensajes entrantes de un número de producción. Configúralo en Meta Business Manager → Cuentas de WhatsApp → Números de teléfono → Verificación en dos pasos, luego pégalo aquí para que wacrm pueda suscribir el número.",
+      "pinHint": "Necesario únicamente para conectar mensajes entrantes de un número de producción. Configúralo en Meta Business Manager → Cuentas de WhatsApp → Números de teléfono → Verificación en dos pasos, luego pégalo aquí para que WIN.AI pueda suscribir el número.",
       "webhookTitle": "Configuración del Webhook",
       "webhookDesc": "Usa esta URL como tu dirección de callback de webhook en el panel de aplicaciones de Meta.",
       "webhookUrl": "URL de callback de Webhook",
@@ -1616,7 +1616,7 @@
     },
     "aiConfig": {
       "title": "Configuración del agente",
-      "description": "Trae tu propia clave de OpenAI o Anthropic. wacrm se conecta directamente al proveedor con tu clave — sin tarifas de IA por usuario, y tus datos siguen siendo tuyos. Esto potencia las respuestas redactadas con IA en la bandeja de entrada, el bot de autorespuesta y el Playground.",
+      "description": "Configura el agente de WIN.AI con OpenAI o Anthropic. Puede usar una clave segura por cuenta o la variable OPENAI_API_KEY del servidor; las claves nunca se exponen al frontend.",
       "adminOnlyConfig": "Solo los administradores y propietarios pueden cambiar la configuración de la IA.",
       "loadFailed": "Error al cargar la configuración de la IA",
       "providerAndKey": "Proveedor y clave",
@@ -1652,7 +1652,18 @@
       "saveSuccess": "Asistente de IA guardado.",
       "saveFailed": "Error al guardar.",
       "removeSuccess": "Configuración de IA eliminada.",
-      "removeFailed": "Error al eliminar."
+      "removeFailed": "Error al eliminar.",
+      "agentName": "Nombre del agente",
+      "agentDescription": "Descripcion del agente",
+      "agentDescriptionPlaceholder": "Ej. Asistente comercial de WIN.AI para calificar leads y responder consultas frecuentes.",
+      "tone": "Tono",
+      "tonePlaceholder": "profesional, claro y cercano",
+      "primaryLanguage": "Idioma principal",
+      "temperature": "Temperatura",
+      "businessInstructions": "Instrucciones de negocio",
+      "businessInstructionsPlaceholder": "Define productos, servicios, condiciones conocidas, horarios, zonas atendidas y criterios para derivar a un humano.",
+      "safetyRules": "Reglas anti-alucinacion",
+      "safetyRulesPlaceholder": "No inventar precios, disponibilidad, promociones ni promesas. Si falta informacion, pedir datos o derivar a un humano."
     },
     "aiKnowledge": {
       "loadFailed": "Error al cargar la base de conocimientos",
@@ -1684,7 +1695,7 @@
   },
   "AiAgentsPage": {
     "title": "Agentes IA",
-    "description": "Tu propio agente de IA configurado con tu clave API. Configúralo y pruébalo en el Playground antes de que responda a los clientes en la bandeja de entrada.",
+    "description": "Configura y prueba agentes IA reales para responder conversaciones de WIN.AI de forma segura, con contexto de cuenta y base de conocimientos.",
     "tabPlayground": "Playground",
     "tabSetup": "Configuración",
     "tabUsage": "Uso"

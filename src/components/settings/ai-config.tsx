@@ -68,6 +68,13 @@ export function AiConfig() {
   const [embeddingsKey, setEmbeddingsKey] = useState('');
   const [embeddingsKeyEdited, setEmbeddingsKeyEdited] = useState(false);
   const [hasStoredEmbeddingsKey, setHasStoredEmbeddingsKey] = useState(false);
+  const [agentName, setAgentName] = useState('WIN.AI Assistant');
+  const [agentDescription, setAgentDescription] = useState('');
+  const [tone, setTone] = useState('profesional y claro');
+  const [primaryLanguage, setPrimaryLanguage] = useState('es');
+  const [businessInstructions, setBusinessInstructions] = useState('');
+  const [safetyRules, setSafetyRules] = useState('');
+  const [temperature, setTemperature] = useState(0.3);
   const [systemPrompt, setSystemPrompt] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
@@ -95,6 +102,13 @@ export function AiConfig() {
         setConfigured(true);
         setProvider(data.provider);
         setModel(data.model);
+        setAgentName(data.name ?? 'WIN.AI Assistant');
+        setAgentDescription(data.description ?? '');
+        setTone(data.tone ?? 'profesional y claro');
+        setPrimaryLanguage(data.primary_language ?? 'es');
+        setBusinessInstructions(data.business_instructions ?? '');
+        setSafetyRules(data.safety_rules ?? '');
+        setTemperature(Number(data.temperature ?? 0.3));
         setSystemPrompt(data.system_prompt ?? '');
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
@@ -146,6 +160,13 @@ export function AiConfig() {
     model: model.trim(),
     api_key: keyPayload(),
     embeddings_api_key: embeddingsKeyPayload(),
+    name: agentName.trim() || 'WIN.AI Assistant',
+    description: agentDescription.trim() || null,
+    tone: tone.trim() || 'profesional y claro',
+    primary_language: primaryLanguage.trim() || 'es',
+    business_instructions: businessInstructions.trim() || null,
+    safety_rules: safetyRules.trim() || null,
+    temperature,
     system_prompt: systemPrompt.trim() || null,
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
@@ -215,6 +236,13 @@ export function AiConfig() {
         setHasStoredKey(false);
         setApiKey('');
         setKeyEdited(false);
+        setAgentName('WIN.AI Assistant');
+        setAgentDescription('');
+        setTone('profesional y claro');
+        setPrimaryLanguage('es');
+        setBusinessInstructions('');
+        setSafetyRules('');
+        setTemperature(0.3);
         setIsActive(false);
         setAutoReplyEnabled(false);
         setSystemPrompt('');
@@ -389,6 +417,71 @@ export function AiConfig() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="ai-agent-name">{t('agentName')}</Label>
+                <Input
+                  id="ai-agent-name"
+                  value={agentName}
+                  onChange={(e) => setAgentName(e.target.value)}
+                  placeholder="WIN.AI Assistant"
+                  disabled={disabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ai-language">{t('primaryLanguage')}</Label>
+                <Input
+                  id="ai-language"
+                  value={primaryLanguage}
+                  onChange={(e) => setPrimaryLanguage(e.target.value)}
+                  placeholder="es"
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="ai-tone">{t('tone')}</Label>
+                <Input
+                  id="ai-tone"
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value)}
+                  placeholder={t('tonePlaceholder')}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ai-temperature">{t('temperature')}</Label>
+                <Input
+                  id="ai-temperature"
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={temperature}
+                  onChange={(e) =>
+                    setTemperature(
+                      Math.min(1, Math.max(0, Number(e.target.value) || 0)),
+                    )
+                  }
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-agent-description">{t('agentDescription')}</Label>
+              <Textarea
+                id="ai-agent-description"
+                value={agentDescription}
+                onChange={(e) => setAgentDescription(e.target.value)}
+                placeholder={t('agentDescriptionPlaceholder')}
+                rows={2}
+                disabled={disabled}
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="ai-prompt">{t('businessContext')}</Label>
               <Textarea
@@ -397,6 +490,32 @@ export function AiConfig() {
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 placeholder={t('promptPlaceholder')}
                 rows={5}
+                disabled={disabled}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-business-instructions">
+                {t('businessInstructions')}
+              </Label>
+              <Textarea
+                id="ai-business-instructions"
+                value={businessInstructions}
+                onChange={(e) => setBusinessInstructions(e.target.value)}
+                placeholder={t('businessInstructionsPlaceholder')}
+                rows={4}
+                disabled={disabled}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-safety-rules">{t('safetyRules')}</Label>
+              <Textarea
+                id="ai-safety-rules"
+                value={safetyRules}
+                onChange={(e) => setSafetyRules(e.target.value)}
+                placeholder={t('safetyRulesPlaceholder')}
+                rows={3}
                 disabled={disabled}
               />
             </div>

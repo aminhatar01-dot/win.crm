@@ -102,6 +102,12 @@ export async function POST(request: Request) {
       userPrompt: config.systemPrompt,
       mode: 'draft',
       knowledge,
+      agentName: config.name,
+      agentDescription: config.description,
+      tone: config.tone,
+      primaryLanguage: config.primaryLanguage,
+      businessInstructions: config.businessInstructions,
+      safetyRules: config.safetyRules,
     })
 
     const { text, usage } = await generateReply({ config, systemPrompt, messages })

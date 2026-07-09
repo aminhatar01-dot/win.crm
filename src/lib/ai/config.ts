@@ -3,10 +3,17 @@ import { decrypt } from '@/lib/whatsapp/encryption'
 import type { AiConfig } from './types'
 
 interface AiConfigRow {
+  name: string | null
+  description: string | null
   provider: 'openai' | 'anthropic'
   model: string
-  api_key: string
+  api_key: string | null
   system_prompt: string | null
+  tone: string | null
+  primary_language: string | null
+  business_instructions: string | null
+  safety_rules: string | null
+  temperature: number | null
   is_active: boolean
   auto_reply_enabled: boolean
   auto_reply_max_per_conversation: number
@@ -15,7 +22,32 @@ interface AiConfigRow {
 }
 
 const CONFIG_COLUMNS =
-  'provider, model, api_key, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, embeddings_api_key'
+  'name, description, provider, model, api_key, system_prompt, tone, primary_language, business_instructions, safety_rules, temperature, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, embeddings_api_key'
+
+function envOpenAiConfig(): AiConfig | null {
+  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  if (!apiKey) return null
+  return {
+    name: 'WIN.AI Assistant',
+    description: 'Agente gestionado con OPENAI_API_KEY del servidor.',
+    provider: 'openai',
+    model: process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini',
+    apiKey,
+    baseUrl: process.env.OPENAI_BASE_URL?.trim() || null,
+    systemPrompt: null,
+    tone: 'profesional y claro',
+    primaryLanguage: 'es',
+    businessInstructions: null,
+    safetyRules: null,
+    temperature: 0.3,
+    managedByEnv: true,
+    isActive: true,
+    autoReplyEnabled: false,
+    autoReplyMaxPerConversation: 3,
+    handoffAgentId: null,
+    embeddingsApiKey: null,
+  }
+}
 
 /**
  * Load and decrypt the account's AI config for *use* (draft or
@@ -41,7 +73,7 @@ export async function loadAiConfig(
     .maybeSingle()
 
   if (error) throw error
-  if (!data) return null
+  if (!data) return envOpenAiConfig()
 
   const row = data as AiConfigRow
   // The Playground passes requireActive:false so an admin can test the
@@ -50,7 +82,8 @@ export async function loadAiConfig(
   // Defensive: the column is NOT NULL, but a partial write / manual DB
   // edit could leave it empty. Treat a missing key as "not configured"
   // rather than letting decrypt() throw on null.
-  if (!row.api_key) return null
+  const envConfig = envOpenAiConfig()
+  if (!row.api_key && !envConfig) return null
 
   // The embeddings key is optional and independent of the chat key —
   // a corrupt/undecryptable one should downgrade to lexical KB, not
@@ -69,11 +102,25 @@ export async function loadAiConfig(
     }
   }
 
+  const apiKey = row.api_key ? decrypt(row.api_key) : envConfig!.apiKey
+
   return {
+    name: row.name || envConfig?.name || 'WIN.AI Assistant',
+    description: row.description,
     provider: row.provider,
-    model: row.model,
-    apiKey: decrypt(row.api_key),
+    model: row.model || envConfig?.model || 'gpt-4o-mini',
+    apiKey,
+    baseUrl: row.provider === 'openai' ? envConfig?.baseUrl ?? null : null,
     systemPrompt: row.system_prompt,
+    tone: row.tone || 'profesional y claro',
+    primaryLanguage: row.primary_language || 'es',
+    businessInstructions: row.business_instructions,
+    safetyRules: row.safety_rules,
+    temperature:
+      typeof row.temperature === 'number'
+        ? Math.min(1, Math.max(0, row.temperature))
+        : 0.3,
+    managedByEnv: !row.api_key,
     isActive: row.is_active,
     autoReplyEnabled: row.auto_reply_enabled,
     autoReplyMaxPerConversation: row.auto_reply_max_per_conversation,

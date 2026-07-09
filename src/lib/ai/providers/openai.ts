@@ -8,7 +8,14 @@ import {
   type ProviderArgs,
 } from './shared'
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
+const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
+
+function openAiChatCompletionsUrl(baseUrl?: string | null): string {
+  const clean = (baseUrl || process.env.OPENAI_BASE_URL || DEFAULT_OPENAI_BASE_URL)
+    .trim()
+    .replace(/\/+$/, '')
+  return `${clean}/chat/completions`
+}
 
 interface OpenAiResponse {
   choices?: { message?: { content?: string } }[]
@@ -25,11 +32,11 @@ interface OpenAiResponse {
  * in `generateReply`).
  */
 export async function generateOpenAi(args: ProviderArgs): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args
+  const { apiKey, model, systemPrompt, messages, timeoutMs, baseUrl, temperature } = args
 
   let res: Response
   try {
-    res = await fetch(OPENAI_URL, {
+    res = await fetch(openAiChatCompletionsUrl(baseUrl), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -42,6 +49,7 @@ export async function generateOpenAi(args: ProviderArgs): Promise<ProviderResult
           ...mergeConsecutive(messages),
         ],
         max_completion_tokens: MAX_OUTPUT_TOKENS,
+        temperature,
       }),
       signal: AbortSignal.timeout(timeoutMs),
     })

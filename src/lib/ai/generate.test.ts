@@ -4,10 +4,19 @@ import { AiError, type AiConfig } from './types'
 
 function config(overrides: Partial<AiConfig> = {}): AiConfig {
   return {
+    name: 'WIN.AI Assistant',
+    description: null,
     provider: 'openai',
     model: 'gpt-test',
     apiKey: 'sk-test',
+    baseUrl: null,
     systemPrompt: null,
+    tone: 'profesional y claro',
+    primaryLanguage: 'es',
+    businessInstructions: null,
+    safetyRules: null,
+    temperature: 0.3,
+    managedByEnv: false,
     isActive: true,
     autoReplyEnabled: false,
     autoReplyMaxPerConversation: 3,
