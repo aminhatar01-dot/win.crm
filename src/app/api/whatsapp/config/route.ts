@@ -110,7 +110,7 @@ export async function GET() {
       )
     }
 
-    // Try to decrypt the stored token with the current ENCRYPTION_KEY.
+    // Try to decrypt the stored token with the current WHATSAPP_TOKEN_ENCRYPTION_KEY.
     // If this fails, the key changed (or was never consistent across envs).
     let accessToken: string
     try {
@@ -123,7 +123,7 @@ export async function GET() {
           reason: 'token_corrupted',
           needs_reset: true,
           message:
-            'The stored access token cannot be decrypted with the current ENCRYPTION_KEY. This usually means the key changed, or it differs between environments (local vs Hostinger vs Vercel). Click "Reset Configuration" below, then re-save.',
+            'The stored access token cannot be decrypted with the current WHATSAPP_TOKEN_ENCRYPTION_KEY. This usually means the key changed, or it differs between environments (local vs Hostinger vs Vercel). Click "Reset Configuration" below, then re-save.',
         },
         { status: 200 }
       )
@@ -263,7 +263,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            'Failed to encrypt token. Check that ENCRYPTION_KEY is a valid 64-character hex string in your environment variables.',
+            'Failed to encrypt token. Check that WHATSAPP_TOKEN_ENCRYPTION_KEY is a valid 64-character hex string in your environment variables.',
         },
         { status: 500 }
       )
@@ -436,7 +436,7 @@ export async function POST(request: Request) {
  *
  * Removes the authenticated user's WhatsApp configuration row.
  * Used by the "Reset Configuration" button to recover from a corrupted
- * encrypted token (mismatched ENCRYPTION_KEY across environments).
+ * encrypted token (mismatched WHATSAPP_TOKEN_ENCRYPTION_KEY across environments).
  */
 export async function DELETE() {
   try {

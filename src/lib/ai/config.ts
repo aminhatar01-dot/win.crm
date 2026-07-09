@@ -54,7 +54,7 @@ function envOpenAiConfig(): AiConfig | null {
  * auto-reply). Returns `null` when there's no row or the master switch
  * (`is_active`) is off — both mean "AI is not available", which callers
  * treat identically. Throws only if the stored key can't be decrypted
- * (mismatched `ENCRYPTION_KEY`), so that distinct failure surfaces
+ * (mismatched `WHATSAPP_TOKEN_ENCRYPTION_KEY`), so that distinct failure surfaces
  * rather than looking like "not configured".
  *
  * Works with any client: pass the RLS-scoped SSR client from a
@@ -93,10 +93,10 @@ export async function loadAiConfig(
     try {
       embeddingsApiKey = decrypt(row.embeddings_api_key)
     } catch {
-      // Not silent — a rotated/mismatched ENCRYPTION_KEY here means
+      // Not silent — a rotated/mismatched WHATSAPP_TOKEN_ENCRYPTION_KEY here means
       // semantic search quietly stops working, so leave a breadcrumb.
       console.error(
-        `[ai config] embeddings key for account ${accountId} could not be decrypted — check ENCRYPTION_KEY; semantic search is disabled until it is re-entered.`,
+        `[ai config] embeddings key for account ${accountId} could not be decrypted — check WHATSAPP_TOKEN_ENCRYPTION_KEY; semantic search is disabled until it is re-entered.`,
       )
       embeddingsApiKey = null
     }
@@ -154,7 +154,7 @@ export async function loadEmbeddingsKey(
     return { key: decrypt(data.embeddings_api_key), corrupt: false }
   } catch {
     console.error(
-      `[ai config] embeddings key for account ${accountId} could not be decrypted — check ENCRYPTION_KEY.`,
+      `[ai config] embeddings key for account ${accountId} could not be decrypted — check WHATSAPP_TOKEN_ENCRYPTION_KEY.`,
     )
     return { key: null, corrupt: true }
   }

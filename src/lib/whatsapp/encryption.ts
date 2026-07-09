@@ -26,19 +26,73 @@ import crypto from 'crypto'
  *   `src/app/api/whatsapp/send/route.ts`.
  */
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!
+const ENCRYPTION_ENV_VARS = [
+  'WHATSAPP_TOKEN_ENCRYPTION_KEY',
+  'ENCRYPTION_KEY',
+] as const
 // 12 bytes is the NIST-recommended IV length for GCM — keeps the
 // counter block well below 2^32 and matches the default web-crypto
 // behaviour, so any future port is straightforward.
 const GCM_IV_LENGTH = 12
 const CBC_IV_LENGTH = 16
 const AUTH_TAG_LENGTH = 16
+const AES_256_KEY_LENGTH = 32
+
+export class EncryptionKeyError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'EncryptionKeyError'
+  }
+}
+
+function normalizeEnvSecret(value: string): string {
+  const trimmed = value.trim()
+  const quote = trimmed[0]
+  if (
+    trimmed.length >= 2 &&
+    (quote === '"' || quote === "'") &&
+    trimmed[trimmed.length - 1] === quote
+  ) {
+    return trimmed.slice(1, -1).trim()
+  }
+  return trimmed
+}
+
+function readEncryptionKeyBuffer(): Buffer {
+  const candidate = ENCRYPTION_ENV_VARS
+    .map((name) => ({
+      name,
+      value: process.env[name]
+        ? normalizeEnvSecret(process.env[name] as string)
+        : '',
+    }))
+    .find(({ value }) => value.length > 0)
+
+  if (!candidate) {
+    throw new EncryptionKeyError(
+      `Missing encryption key. Set ${ENCRYPTION_ENV_VARS[0]} to a 64-character hex string (32 bytes).`,
+    )
+  }
+
+  const isHex = /^[0-9a-fA-F]+$/.test(candidate.value)
+  const keyBuffer = isHex ? Buffer.from(candidate.value, 'hex') : Buffer.alloc(0)
+
+  if (candidate.value.length !== 64 || keyBuffer.length !== AES_256_KEY_LENGTH) {
+    throw new EncryptionKeyError(
+      `Invalid ${candidate.name}: expected 64 hex characters (32 bytes) after trimming; got keyLength=${candidate.value.length}, bufferLength=${keyBuffer.length}.`,
+    )
+  }
+
+  return keyBuffer
+}
+
+const ENCRYPTION_KEY_BUFFER = readEncryptionKeyBuffer()
 
 export function encrypt(text: string): string {
   const iv = crypto.randomBytes(GCM_IV_LENGTH)
   const cipher = crypto.createCipheriv(
     'aes-256-gcm',
-    Buffer.from(ENCRYPTION_KEY, 'hex'),
+    ENCRYPTION_KEY_BUFFER,
     iv,
   )
   let encrypted = cipher.update(text, 'utf8', 'hex')
@@ -67,7 +121,7 @@ export function decrypt(encryptedText: string): string {
     }
     const decipher = crypto.createDecipheriv(
       'aes-256-gcm',
-      Buffer.from(ENCRYPTION_KEY, 'hex'),
+      ENCRYPTION_KEY_BUFFER,
       iv,
     )
     decipher.setAuthTag(authTag)
@@ -87,7 +141,7 @@ export function decrypt(encryptedText: string): string {
     }
     const decipher = crypto.createDecipheriv(
       'aes-256-cbc',
-      Buffer.from(ENCRYPTION_KEY, 'hex'),
+      ENCRYPTION_KEY_BUFFER,
       iv,
     )
     let decrypted = decipher.update(ctHex, 'hex', 'utf8')

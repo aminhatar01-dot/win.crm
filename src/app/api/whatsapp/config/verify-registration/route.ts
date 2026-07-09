@@ -80,7 +80,7 @@ export async function GET() {
         token_decryptable: false,
       },
       message:
-        'Stored access token can\'t be decrypted — likely ENCRYPTION_KEY changed. Re-enter the token to repair.',
+        'Stored access token can\'t be decrypted — likely WHATSAPP_TOKEN_ENCRYPTION_KEY changed. Re-enter the token to repair.',
     })
   }
 

@@ -12,6 +12,8 @@ export default defineConfig({
     // any 32-byte hex / non-empty string will do; keep them lexically
     // identical to the CI build env so behaviour matches.
     env: {
+      WHATSAPP_TOKEN_ENCRYPTION_KEY:
+        "0000000000000000000000000000000000000000000000000000000000000000",
       ENCRYPTION_KEY:
         "0000000000000000000000000000000000000000000000000000000000000000",
       META_APP_SECRET: "test-meta-app-secret",
