@@ -879,6 +879,7 @@
       "replyIdsHelp": "Comma-separated button/list-row ids to match, exact. Use the same ids you set on a Send Buttons / Send List step.",
       "schedule": "Schedule",
       "scheduleHint": "Cron expression (e.g. 0 9 * * 1-5)",
+      "schedulePlaceholder": "Cron expression or HH:mm",
       "active": "Active",
       "activeAria": "Active",
       "save": "Save",
@@ -1692,5 +1693,43 @@
       "reindexTooltip": "Re-embed all documents (e.g. after adding an embeddings key)",
       "loading": "Loading…"
     }
+  },
+  "AiAgentsPage": {
+    "title": "AI Agents",
+    "description": "Your bring-your-own-key AI agent — set it up, then test it in the playground before it replies to customers in the inbox.",
+    "tabPlayground": "Playground",
+    "tabSetup": "Setup",
+    "tabUsage": "Usage"
+  },
+  "AiPlayground": {
+    "title": "Playground",
+    "subtitle": "— test replies as if you were a customer",
+    "btnReset": "Reset",
+    "emptyTitle": "Send a message to see how your agent would reply.",
+    "emptyDesc": "It uses your knowledge base and behaves exactly like the auto-reply bot — including handoff.",
+    "btnGoToSetup": "Not set up yet? Go to Setup",
+    "handoffLabel": "Would hand off to a human here",
+    "thinking": "Thinking…",
+    "inputPlaceholder": "Type a customer message…",
+    "toastNotConfigured": "No agent configured yet — finish Setup first.",
+    "toastErrorReply": "Couldn't get a reply.",
+    "toastNetworkError": "Couldn't reach the agent."
+  },
+  "AiUsage": {
+    "title": "Token usage",
+    "description": "Tokens spent on your provider key by drafts and the auto-reply bot. Counts only — no message content is stored here.",
+    "lastNDays": "Last {n} days",
+    "emptyTitle": "No AI usage in the last {days} days yet.",
+    "emptyDesc": "This fills in as the assistant drafts and auto-replies.",
+    "statTotalTokens": "Total tokens",
+    "statLlmCalls": "LLM calls",
+    "statAutoReply": "Auto-reply",
+    "statDrafts": "Drafts",
+    "tokensPerDay": "Tokens per day",
+    "byModel": "By model",
+    "callSingular": "call",
+    "callPlural": "calls",
+    "truncatedNote": "Showing a partial window — usage is high enough that only the most recent records are summarized here.",
+    "toastError": "Failed to load usage"
   }
 }
