@@ -269,12 +269,20 @@ export interface MessageReaction {
 export interface WhatsAppConfig {
   id: string;
   user_id: string;
-  phone_number_id: string;
+  account_id?: string;
+  connection_method?: 'official_cloud_api' | 'qr_session';
+  phone_number_id?: string | null;
   waba_id?: string;
-  access_token: string;
+  access_token?: string | null;
   verify_token?: string;
   status: 'connected' | 'disconnected';
   connected_at?: string;
+  qr_status?: 'disconnected' | 'waiting_qr' | 'connecting' | 'connected' | 'error';
+  qr_session_ref?: string | null;
+  qr_session_ciphertext?: string | null;
+  qr_last_error?: string | null;
+  qr_connected_at?: string | null;
+  qr_updated_at?: string | null;
   /**
    * Set when POST /{phone_number_id}/register last succeeded. NULL
    * means the number was saved but never actually subscribed for

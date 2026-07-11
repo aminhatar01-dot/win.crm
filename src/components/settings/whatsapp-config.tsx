@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import Image from 'next/image';
 import { toast } from 'sonner';
 import {
   Eye,
@@ -13,6 +14,8 @@ import {
   Zap,
   AlertTriangle,
   RotateCcw,
+  QrCode,
+  Cloud,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -35,9 +38,21 @@ const MASKED_TOKEN = '••••••••••••••••';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'unknown';
 type ResetReason = 'token_corrupted' | 'meta_api_error' | null;
+type ConnectionMethod = 'official_cloud_api' | 'qr_session';
+type QrStatus =
+  | 'disconnected'
+  | 'waiting_qr'
+  | 'connecting'
+  | 'connected'
+  | 'error';
 
 export function WhatsAppConfig() {
   const t = useTranslations('Settings.whatsapp');
+  const richText = {
+    strong: (chunks: ReactNode) => (
+      <strong className="text-foreground">{chunks}</strong>
+    ),
+  };
   const supabase = createClient();
   // After multi-user, whatsapp_config is one-row-per-account, not
   // one-row-per-user. We pull `accountId` straight off the auth
@@ -55,6 +70,13 @@ export function WhatsAppConfig() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
   const [resetReason, setResetReason] = useState<ResetReason>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [connectionMethod, setConnectionMethod] =
+    useState<ConnectionMethod>('official_cloud_api');
+  const [qrStatus, setQrStatus] = useState<QrStatus>('disconnected');
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrExpiresAt, setQrExpiresAt] = useState<string | null>(null);
+  const [qrBusy, setQrBusy] = useState(false);
+  const [qrLastError, setQrLastError] = useState<string | null>(null);
   // Guards against re-hydrating the form when the load effect below
   // re-runs for reasons unrelated to actually switching accounts —
   // e.g. Supabase's onAuthStateChange fires a token refresh (new
@@ -115,6 +137,9 @@ export function WhatsAppConfig() {
 
       if (data) {
         setConfig(data);
+        setConnectionMethod(data.connection_method || 'official_cloud_api');
+        setQrStatus(data.qr_status || 'disconnected');
+        setQrLastError(data.qr_last_error || null);
         setPhoneNumberId(data.phone_number_id || '');
         setWabaId(data.waba_id || '');
         setAccessToken(MASKED_TOKEN);
@@ -123,6 +148,10 @@ export function WhatsAppConfig() {
         setTokenEdited(false);
       } else {
         setConfig(null);
+        setConnectionMethod('official_cloud_api');
+        setQrStatus('disconnected');
+        setQrLastError(null);
+        setQrDataUrl(null);
         setPhoneNumberId('');
         setWabaId('');
         setAccessToken('');
@@ -135,6 +164,31 @@ export function WhatsAppConfig() {
 
       // Then verify health via the API (decrypts token + pings Meta)
       if (data) {
+        if (data.connection_method === 'qr_session') {
+          try {
+            const res = await fetch('/api/whatsapp/qr/status', {
+              method: 'GET',
+              cache: 'no-store',
+            });
+            const payload = await res.json();
+            if (res.ok) {
+              setQrStatus(payload.status || 'disconnected');
+              setQrLastError(payload.last_error || null);
+              setConnectionStatus(
+                payload.status === 'connected' ? 'connected' : 'disconnected',
+              );
+              setStatusMessage(payload.last_error || '');
+            } else {
+              setQrLastError(payload.error || 'No se pudo sincronizar el estado QR.');
+              setConnectionStatus('disconnected');
+            }
+          } catch (err) {
+            console.error('QR health check failed:', err);
+            setConnectionStatus('disconnected');
+          }
+          return;
+        }
+
         try {
           const res = await fetch('/api/whatsapp/config', { method: 'GET' });
           const payload = await res.json();
@@ -182,7 +236,68 @@ export function WhatsAppConfig() {
     fetchConfig(accountId);
   }, [authLoading, profileLoading, user?.id, accountId, fetchConfig]);
 
+  useEffect(() => {
+    if (connectionMethod !== 'qr_session') return;
+    if (!['waiting_qr', 'connecting'].includes(qrStatus)) return;
+
+    let cancelled = false;
+    const pollQrSession = async () => {
+      try {
+        const statusRes = await fetch('/api/whatsapp/qr/status', {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        const statusData = await statusRes.json();
+        if (!statusRes.ok) {
+          if (!cancelled) {
+            setQrLastError(statusData.error || 'No se pudo consultar el estado QR.');
+          }
+          return;
+        }
+        if (cancelled) return;
+        setQrStatus(statusData.status || 'disconnected');
+        setQrLastError(statusData.last_error || null);
+
+        if (statusData.status === 'waiting_qr') {
+          const qrRes = await fetch('/api/whatsapp/qr', {
+            method: 'GET',
+            cache: 'no-store',
+          });
+          const qrData = await qrRes.json();
+          if (!cancelled && qrRes.ok) {
+            setQrDataUrl(qrData.qr_data_url || null);
+            setQrExpiresAt(qrData.expires_at || null);
+            setQrLastError(qrData.last_error || null);
+          }
+        } else if (statusData.status === 'connecting') {
+          setQrDataUrl(null);
+          setQrExpiresAt(null);
+        } else if (statusData.status === 'connected') {
+          setQrDataUrl(null);
+          setQrExpiresAt(null);
+          toast.success('WhatsApp QR conectado.');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('QR polling failed:', err);
+          setQrLastError('No se pudo consultar el estado QR.');
+        }
+      }
+    };
+
+    const interval = window.setInterval(pollQrSession, 3000);
+    void pollQrSession();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [connectionMethod, qrStatus]);
+
   async function handleSave() {
+    if (connectionMethod === 'qr_session') {
+      toast.error('Usa "Generar QR" para iniciar la conexión por QR.');
+      return;
+    }
     if (!phoneNumberId.trim()) {
       toast.error('Phone Number ID is required');
       return;
@@ -196,7 +311,7 @@ export function WhatsAppConfig() {
       setSaving(true);
 
       // Always POST through the API — it verifies with Meta and encrypts
-      // the access_token server-side with ENCRYPTION_KEY. Skipping this
+      // the access_token server-side with WHATSAPP_TOKEN_ENCRYPTION_KEY. Skipping this
       // and writing direct to Supabase stores the token in plaintext,
       // which then fails decryption on every subsequent health check.
       const payload: Record<string, unknown> = {
@@ -371,6 +486,83 @@ export function WhatsAppConfig() {
     toast.success('Webhook URL copied to clipboard');
   }
 
+  function qrStatusLabel(status: QrStatus) {
+    if (status === 'waiting_qr') return 'esperando escaneo';
+    if (status === 'connecting') return 'QR escaneado, conectando';
+    if (status === 'connected') return 'conectado';
+    if (status === 'error') return 'error';
+    return 'desconectado';
+  }
+
+  async function handleGenerateQr() {
+    try {
+      setQrBusy(true);
+      setQrLastError(null);
+      const res = await fetch('/api/whatsapp/qr/start', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setQrLastError(data.error || 'No se pudo generar el QR.');
+        toast.error(data.error || 'No se pudo generar el QR.');
+        return;
+      }
+      setConnectionMethod('qr_session');
+      setQrStatus(data.status || 'waiting_qr');
+      setQrDataUrl(data.qr_data_url || null);
+      setQrExpiresAt(data.expires_at || null);
+      toast.success('QR generado. Escanealo desde WhatsApp en tu telefono.');
+      if (accountId) await fetchConfig(accountId);
+    } catch (err) {
+      console.error('QR start failed:', err);
+      toast.error('No se pudo contactar el conector QR.');
+    } finally {
+      setQrBusy(false);
+    }
+  }
+
+  async function handleRefreshQrStatus() {
+    try {
+      setQrBusy(true);
+      const res = await fetch('/api/whatsapp/qr/status', { method: 'GET' });
+      const data = await res.json();
+      if (!res.ok) {
+        setQrLastError(data.error || 'No se pudo consultar el estado QR.');
+        toast.error(data.error || 'No se pudo consultar el estado QR.');
+        return;
+      }
+      setQrStatus(data.status || 'disconnected');
+      setQrLastError(data.last_error || null);
+      if (accountId) await fetchConfig(accountId);
+    } catch (err) {
+      console.error('QR status failed:', err);
+      toast.error('No se pudo consultar el estado QR.');
+    } finally {
+      setQrBusy(false);
+    }
+  }
+
+  async function handleDisconnectQr() {
+    try {
+      setQrBusy(true);
+      const res = await fetch('/api/whatsapp/qr/disconnect', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'No se pudo desconectar QR.');
+        return;
+      }
+      setQrStatus(data.status || 'disconnected');
+      setQrDataUrl(null);
+      setQrExpiresAt(null);
+      setQrLastError(data.last_error || null);
+      toast.success('Sesion QR desconectada.');
+      if (accountId) await fetchConfig(accountId);
+    } catch (err) {
+      console.error('QR disconnect failed:', err);
+      toast.error('No se pudo desconectar QR.');
+    } finally {
+      setQrBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <section className="animate-in fade-in-50 duration-200">
@@ -431,6 +623,68 @@ export function WhatsAppConfig() {
           </Alert>
         )}
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">Metodo de conexion</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Elegi entre la API oficial de Meta o una conexion QR experimental para pruebas rapidas.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setConnectionMethod('official_cloud_api')}
+                className={
+                  'rounded-md border p-4 text-left transition-colors ' +
+                  (connectionMethod === 'official_cloud_api'
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border bg-muted/40 hover:bg-muted')
+                }
+              >
+                <Cloud className="mb-2 size-5 text-primary" />
+                <p className="text-sm font-medium text-foreground">
+                  WhatsApp Cloud API / Metodo oficial
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Recomendado para produccion estable, webhooks oficiales y plantillas Meta.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setConnectionMethod('qr_session')}
+                className={
+                  'rounded-md border p-4 text-left transition-colors ' +
+                  (connectionMethod === 'qr_session'
+                    ? 'border-amber-500 bg-amber-950/30'
+                    : 'border-border bg-muted/40 hover:bg-muted')
+                }
+              >
+                <QrCode className="mb-2 size-5 text-amber-400" />
+                <p className="text-sm font-medium text-foreground">
+                  Conexion por QR
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Experimental / No oficial / Para pruebas.
+                </p>
+              </button>
+            </div>
+            {connectionMethod === 'qr_session' && (
+              <Alert className="border-amber-600/40 bg-amber-950/30">
+                <AlertTriangle className="size-4 text-amber-400" />
+                <AlertTitle className="text-amber-200">
+                  Conexion por QR experimental
+                </AlertTitle>
+                <AlertDescription className="text-amber-100/80">
+                  La conexion por QR es experimental y puede desconectarse. Para produccion estable se recomienda WhatsApp Cloud API oficial.
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
+        {connectionMethod === 'official_cloud_api' && (
+          <>
         {/* Connection Status */}
         <Alert className="bg-card border-border">
           <div className="flex items-center gap-2">
@@ -456,7 +710,7 @@ export function WhatsAppConfig() {
             without a successful /register call the number won't
             receive inbound events. Surface this dimension separately
             so users don't trust a misleading green banner. */}
-        {config && (
+        {config && connectionMethod === 'official_cloud_api' && (
           <Alert
             className={
               isRegistered
@@ -498,15 +752,13 @@ export function WhatsAppConfig() {
             </div>
             <AlertDescription className="text-muted-foreground mt-2 text-xs leading-relaxed">
               {isRegistered ? (
-                <span
-                  dangerouslySetInnerHTML={{
-                    __html: t('subscribedSince', {
-                      date: config.registered_at
-                        ? new Date(config.registered_at).toLocaleString()
-                        : t('unknownDate'),
-                    }),
-                  }}
-                />
+                <span>
+                  {t('subscribedSince', {
+                    date: config.registered_at
+                      ? new Date(config.registered_at).toLocaleString()
+                      : t('unknownDate'),
+                  })}
+                </span>
               ) : lastRegistrationError ? (
                 <>
                   {t('lastAttemptFailed')}
@@ -647,7 +899,7 @@ export function WhatsAppConfig() {
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground tracking-widest"
               />
               <p className="text-xs text-muted-foreground leading-relaxed">
-                <span dangerouslySetInnerHTML={{ __html: t('pinHint') }} />
+                <span>{t('pinHint')}</span>
               </p>
             </div>
           </CardContent>
@@ -738,6 +990,98 @@ export function WhatsAppConfig() {
             </Button>
           )}
         </div>
+          </>
+        )}
+
+        {connectionMethod === 'qr_session' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-foreground">
+                <QrCode className="size-5 text-amber-400" />
+                Conexion por QR
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Usa un conector Node dedicado para mantener la sesion de WhatsApp Web por tenant.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  Estado: {qrStatusLabel(qrStatus)}
+                </span>
+                {qrExpiresAt && (
+                  <span className="text-xs text-muted-foreground">
+                    Expira: {new Date(qrExpiresAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              {qrDataUrl ? (
+                <div className="flex justify-center rounded-md border border-border bg-white p-4">
+                  <Image
+                    src={qrDataUrl}
+                    alt="Codigo QR para conectar WhatsApp"
+                    width={256}
+                    height={256}
+                    unoptimized
+                    className="h-64 w-64 object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                  Genera un QR y escanealo desde WhatsApp en tu telefono.
+                </div>
+              )}
+
+              {qrLastError && (
+                <Alert className="border-red-900 bg-red-950/30">
+                  <XCircle className="size-4 text-red-400" />
+                  <AlertTitle className="text-red-200">Error de conexion QR</AlertTitle>
+                  <AlertDescription className="text-red-100/80">
+                    {qrLastError}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={handleGenerateQr}
+                  disabled={
+                    qrBusy ||
+                    qrStatus === 'waiting_qr' ||
+                    qrStatus === 'connecting' ||
+                    qrStatus === 'connected'
+                  }
+                >
+                  {qrBusy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <QrCode className="size-4" />
+                  )}
+                  Generar QR
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleRefreshQrStatus}
+                  disabled={qrBusy}
+                  className="border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {qrBusy ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
+                  Consultar estado
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleDisconnectQr}
+                  disabled={qrBusy}
+                  className="border-red-900 text-red-400 hover:bg-red-950/40 hover:text-red-300"
+                >
+                  <RotateCcw className="size-4" />
+                  Desconectar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Setup Instructions Sidebar */}
@@ -760,7 +1104,7 @@ export function WhatsAppConfig() {
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
                   <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li dangerouslySetInnerHTML={{ __html: t('step1_1') }} />
+                    <li>{t('step1_1')}</li>
                     <li>{t('step1_2')}</li>
                     <li>{t('step1_3')}</li>
                     <li>{t('step1_4')}</li>
@@ -794,9 +1138,9 @@ export function WhatsAppConfig() {
                 <AccordionContent className="text-muted-foreground">
                   <ol className="list-decimal list-inside space-y-1 text-sm">
                     <li>{t('step3_1')}</li>
-                    <li dangerouslySetInnerHTML={{ __html: t('step3_2') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t('step3_3') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t('step3_4') }} />
+                    <li>{t.rich('step3_2', richText)}</li>
+                    <li>{t.rich('step3_3', richText)}</li>
+                    <li>{t.rich('step3_4', richText)}</li>
                   </ol>
                 </AccordionContent>
               </AccordionItem>
@@ -812,8 +1156,8 @@ export function WhatsAppConfig() {
                   <ol className="list-decimal list-inside space-y-1 text-sm">
                     <li>{t('step4_1')}</li>
                     <li>{t('step4_2')}</li>
-                    <li dangerouslySetInnerHTML={{ __html: t('step4_3') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t('step4_4') }} />
+                    <li>{t.rich('step4_3', richText)}</li>
+                    <li>{t.rich('step4_4', richText)}</li>
                     <li>{t('step4_5')}</li>
                   </ol>
                 </AccordionContent>

@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -19,6 +20,8 @@
 
 # production
 /build
+workers/whatsapp-qr-worker/dist/
+workers/whatsapp-qr-worker/.sessions/
 
 # misc
 .DS_Store

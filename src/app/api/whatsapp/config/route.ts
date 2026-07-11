@@ -7,6 +7,8 @@ import {
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
+import { updateQrConfigFromWorker } from '@/lib/whatsapp/providers/qr-config'
+import { getQrStatus } from '@/lib/whatsapp/providers/qr-worker-client'
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
@@ -47,6 +49,70 @@ function supabaseAdmin() {
   return _adminClient
 }
 
+type WhatsAppConfigHealthRow = {
+  phone_number_id: string | null
+  access_token: string | null
+  status: string | null
+  connection_method?: 'official_cloud_api' | 'qr_session' | null
+  qr_status?: string | null
+  qr_last_error?: string | null
+  qr_connected_at?: string | null
+}
+
+function isMissingColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: string; message?: string; details?: string }
+  const text = `${err.message ?? ''} ${err.details ?? ''}`.toLowerCase()
+  return (
+    err.code === '42703' ||
+    err.code === 'PGRST204' ||
+    text.includes('connection_method') ||
+    text.includes('qr_status') ||
+    (text.includes('column') && text.includes('does not exist'))
+  )
+}
+
+async function loadWhatsAppConfigForHealth(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string,
+): Promise<{
+  data: WhatsAppConfigHealthRow | null
+  error: unknown
+  schemaNeedsMigration: boolean
+}> {
+  const extended = await supabase
+    .from('whatsapp_config')
+    .select(
+      'phone_number_id, access_token, status, connection_method, qr_status, qr_last_error, qr_connected_at',
+    )
+    .eq('account_id', accountId)
+    .maybeSingle()
+
+  if (!extended.error) {
+    return {
+      data: extended.data as WhatsAppConfigHealthRow | null,
+      error: null,
+      schemaNeedsMigration: false,
+    }
+  }
+
+  if (!isMissingColumnError(extended.error)) {
+    return { data: null, error: extended.error, schemaNeedsMigration: false }
+  }
+
+  const legacy = await supabase
+    .from('whatsapp_config')
+    .select('phone_number_id, access_token, status')
+    .eq('account_id', accountId)
+    .maybeSingle()
+
+  return {
+    data: legacy.data as WhatsAppConfigHealthRow | null,
+    error: legacy.error,
+    schemaNeedsMigration: true,
+  }
+}
+
 /**
  * GET /api/whatsapp/config
  *
@@ -85,11 +151,11 @@ export async function GET() {
       )
     }
 
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('phone_number_id, access_token, status')
-      .eq('account_id', accountId)
-      .maybeSingle()
+    const {
+      data: config,
+      error: configError,
+      schemaNeedsMigration,
+    } = await loadWhatsAppConfigForHealth(supabase, accountId)
 
     if (configError) {
       console.error('Error fetching whatsapp_config:', configError)
@@ -103,10 +169,70 @@ export async function GET() {
       return NextResponse.json(
         {
           connected: false,
+          provider: 'official_cloud_api',
           reason: 'no_config',
           message: 'No WhatsApp configuration saved yet. Fill in the form and click Save Configuration.',
+          schema_needs_migration: schemaNeedsMigration,
         },
         { status: 200 }
+      )
+    }
+
+    if (schemaNeedsMigration) {
+      return NextResponse.json(
+        {
+          connected: false,
+          provider: 'official_cloud_api',
+          reason: 'migration_required',
+          message:
+            'WhatsApp QR columns are not present yet. Apply Supabase migrations 037 and 038, then reload this page.',
+          schema_needs_migration: true,
+        },
+        { status: 200 },
+      )
+    }
+
+    if (config.connection_method === 'qr_session') {
+      let qrStatus = config.qr_status
+      let qrLastError = config.qr_last_error
+      let qrConnectedAt = config.qr_connected_at
+
+      try {
+        const workerStatus = await getQrStatus(accountId)
+        await updateQrConfigFromWorker(supabase, accountId, workerStatus)
+        qrStatus = workerStatus.status
+        qrLastError = workerStatus.lastError ?? null
+        qrConnectedAt = workerStatus.connectedAt ?? null
+      } catch (err) {
+        console.warn(
+          '[whatsapp/config GET] QR worker status sync failed:',
+          err instanceof Error ? err.message : String(err),
+        )
+      }
+
+      const connected = qrStatus === 'connected'
+      return NextResponse.json({
+        connected,
+        provider: 'qr_session',
+        status: qrStatus,
+        connected_at: qrConnectedAt,
+        reason: connected ? null : qrStatus || 'disconnected',
+        message: connected
+          ? 'QR session is connected.'
+          : qrLastError ||
+            'QR session is not connected. Generate and scan a QR code to connect.',
+      })
+    }
+
+    if (!config.phone_number_id || !config.access_token) {
+      return NextResponse.json(
+        {
+          connected: false,
+          provider: 'official_cloud_api',
+          reason: 'incomplete_config',
+          message: 'WhatsApp Cloud API configuration is incomplete.',
+        },
+        { status: 200 },
       )
     }
 
@@ -354,10 +480,13 @@ export async function POST(request: Request) {
     // store the credentials and the error so the UI can guide the
     // user through a retry.
     const baseRow = {
+      connection_method: 'official_cloud_api',
       phone_number_id,
       waba_id: waba_id || null,
       access_token: encryptedAccessToken,
       verify_token: encryptedVerifyToken,
+      qr_status: 'disconnected',
+      qr_last_error: null,
       status: registrationError ? 'disconnected' : 'connected',
       connected_at: registrationError ? null : new Date().toISOString(),
       registered_at: registrationError ? null : registeredAt,
@@ -374,6 +503,16 @@ export async function POST(request: Request) {
 
       if (updateError) {
         console.error('Error updating whatsapp_config:', updateError)
+        if (isMissingColumnError(updateError)) {
+          return NextResponse.json(
+            {
+              error:
+                'WhatsApp schema is missing QR provider columns. Apply Supabase migrations 037 and 038, then retry.',
+              code: 'migration_required',
+            },
+            { status: 409 },
+          )
+        }
         return NextResponse.json(
           { error: 'Failed to update configuration' },
           { status: 500 }
@@ -394,6 +533,16 @@ export async function POST(request: Request) {
 
       if (insertError) {
         console.error('Error inserting whatsapp_config:', insertError)
+        if (isMissingColumnError(insertError)) {
+          return NextResponse.json(
+            {
+              error:
+                'WhatsApp schema is missing QR provider columns. Apply Supabase migrations 037 and 038, then retry.',
+              code: 'migration_required',
+            },
+            { status: 409 },
+          )
+        }
         return NextResponse.json(
           { error: 'Failed to save configuration' },
           { status: 500 }

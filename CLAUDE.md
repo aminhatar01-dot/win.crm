@@ -17,6 +17,11 @@ Trabajar en la rama `modificaciones1`. La rama fue sincronizada desde `modificac
 - La IA ya existia en `ai_configs`, `/api/ai/draft`, `/api/ai/playground`, auto-reply, knowledge base y `ai_usage_log`.
 - Se extendio `ai_configs` con campos profesionales de agente mediante `036_win_ai_agent_config.sql`.
 - Se agrego soporte a `OPENAI_API_KEY`, `OPENAI_MODEL` y `OPENAI_BASE_URL` server-side.
+- WhatsApp ahora tiene selector de proveedor por cuenta: `official_cloud_api` conserva la integracion Meta existente y `qr_session` agrega conexion QR experimental.
+- QR usa endpoints `src/app/api/whatsapp/qr/*` y cliente de worker en `src/lib/whatsapp/providers/*`; requiere `WHATSAPP_QR_WORKER_URL` y `WHATSAPP_QR_WORKER_SECRET`.
+- No intentar mantener sesiones QR/Baileys dentro de Next serverless. Usar worker Node dedicado con storage durable por tenant; ver `docs/whatsapp-qr.md`.
+- Worker real incluido en `workers/whatsapp-qr-worker` con Express, Baileys, HMAC y storage filesystem configurable por `SESSION_STORAGE_PATH`.
+- Estado QR `connecting` significa QR escaneado/handshake en curso; no tratarlo como conectado. Solo `connection: "open"` de Baileys equivale a `connected`.
 
 ## Validacion esperada
 

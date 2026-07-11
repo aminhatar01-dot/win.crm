@@ -12,9 +12,17 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "workers/whatsapp-qr-worker/dist/**",
     // Vendored minified opus-recorder encoder worker (served statically).
     "public/opus/**",
   ]),
+  {
+    files: ["workers/whatsapp-qr-worker/src/**/*.ts"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
+      "react-hooks/exhaustive-deps": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

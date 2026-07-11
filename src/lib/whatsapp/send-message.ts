@@ -35,6 +35,7 @@ import {
   type InteractiveMessagePayload,
 } from '@/lib/whatsapp/interactive';
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
+import { sendQrMessage } from '@/lib/whatsapp/providers/qr-worker-client';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import {
   sanitizePhoneForMeta,
@@ -260,6 +261,19 @@ export async function sendMessageToConversation(
       'WhatsApp not configured. Please set up your WhatsApp integration first.',
       400
     );
+  }
+
+  const connectionMethod = config.connection_method ?? 'official_cloud_api';
+  if (connectionMethod === 'qr_session') {
+    return sendMessageViaQrProvider(db, accountId, {
+      conversationId,
+      messageType,
+      contentText,
+      mediaUrl,
+      filename,
+      templateName,
+      interactivePayload,
+    });
   }
 
   const accessToken = decrypt(config.access_token);
@@ -513,4 +527,151 @@ export async function sendMessageToConversation(
   }
 
   return { messageId: messageRecord.id, whatsappMessageId: waMessageId };
+}
+
+async function sendMessageViaQrProvider(
+  db: SupabaseClient,
+  accountId: string,
+  params: Pick<
+    SendMessageParams,
+    | 'conversationId'
+    | 'messageType'
+    | 'contentText'
+    | 'mediaUrl'
+    | 'filename'
+    | 'templateName'
+    | 'interactivePayload'
+  >,
+): Promise<SendMessageResult> {
+  const { conversationId, messageType, contentText, mediaUrl, filename } = params;
+  if (messageType === 'template' || messageType === 'interactive') {
+    throw new SendMessageError(
+      'qr_message_type_unsupported',
+      'Templates and interactive messages require WhatsApp Cloud API. Switch to the official method for this message type.',
+      400,
+    );
+  }
+
+  const { data: config, error: configError } = await db
+    .from('whatsapp_config')
+    .select('qr_status')
+    .eq('account_id', accountId)
+    .single();
+
+  if (configError || !config || config.qr_status !== 'connected') {
+    throw new SendMessageError(
+      'qr_not_connected',
+      'QR session is not connected. Scan a QR code before sending messages.',
+      400,
+    );
+  }
+
+  const { data: conversation, error: convError } = await db
+    .from('conversations')
+    .select('*, contact:contacts(*)')
+    .eq('id', conversationId)
+    .eq('account_id', accountId)
+    .single();
+
+  if (convError || !conversation) {
+    throw new SendMessageError('not_found', 'Conversation not found', 404);
+  }
+
+  const contact = conversation.contact;
+  if (!contact?.phone) {
+    throw new SendMessageError(
+      'bad_request',
+      'Contact phone number not found',
+      400,
+    );
+  }
+
+  const to = sanitizePhoneForMeta(contact.phone);
+  if (!isValidE164(to)) {
+    throw new SendMessageError(
+      'bad_request',
+      'Invalid phone number format',
+      400,
+    );
+  }
+
+  let whatsappMessageId = '';
+  try {
+    const result = await sendQrMessage({
+      accountId,
+      to,
+      kind: messageType,
+      text: contentText,
+      mediaUrl,
+      filename,
+    });
+    whatsappMessageId = result.messageId;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Unknown QR connector error';
+    console.error('[send-message] QR send failed:', message);
+    throw new SendMessageError(
+      'qr_error',
+      `QR connector error: ${message}`,
+      502,
+    );
+  }
+
+  const { data: messageRecord, error: msgError } = await db
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      sender_type: 'agent',
+      content_type: messageType,
+      content_text: contentText ?? null,
+      media_url: mediaUrl || null,
+      template_name: null,
+      interactive_payload: null,
+      message_id: whatsappMessageId,
+      status: 'sent',
+      reply_to_message_id: null,
+    })
+    .select()
+    .single();
+
+  if (msgError) {
+    console.error('[send-message] error inserting QR sent message:', msgError);
+    throw new SendMessageError(
+      'db_error',
+      `Message sent via QR but failed to save to DB: ${msgError.message}`,
+      500,
+    );
+  }
+
+  await db
+    .from('conversations')
+    .update({
+      last_message_text: contentText || `[${messageType}]`,
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', conversationId);
+
+  try {
+    const { error: pauseErr } = await supabaseAdmin()
+      .from('flow_runs')
+      .update({
+        status: 'paused_by_agent',
+        ended_at: new Date().toISOString(),
+        end_reason: 'agent_replied',
+      })
+      .eq('account_id', accountId)
+      .eq('contact_id', contact.id)
+      .eq('status', 'active');
+    if (pauseErr) {
+      console.error('[flows] pause-on-qr-send failed:', pauseErr.message);
+    }
+  } catch (err) {
+    console.error(
+      '[flows] pause-on-qr-send threw:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  return { messageId: messageRecord.id, whatsappMessageId };
 }
